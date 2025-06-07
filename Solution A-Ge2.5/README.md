@@ -1,266 +1,113 @@
-# 固定翼无人机B样条避障轨迹生成算法
+# 固定翼无人机B样条轨迹生成器
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![C++](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.cppreference.com/w/cpp/17)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+本项目是一个基于C++实现的固定翼无人机（Fixed-Wing UAV）轨迹生成器。它根据一条稀疏的初始路径点，在包含障碍物的二维环境中，生成一条平滑、安全且满足动力学约束的三次B样条轨迹。
 
-## 概述
+该算法的设计严格遵循了[《障碍环境下固定翼无人机B样条避障轨迹生成算法》](https://hill68.github.io/uas/trajectory_planning/-b-spline/%E9%9A%9C%E7%A2%8D%E7%8E%AF%E5%A2%83%E4%B8%8B%E5%9B%BA%E5%AE%9A%E7%BF%BC%E6%97%A0%E4%BA%BA%E6%9C%BAb-%E6%A0%B7%E6%9D%A1%E9%81%BF%E9%9A%9C%E8%BD%A8%E8%BF%B9%E7%94%9F%E6%88%90%E7%AE%97%E6%B3%95/index.html)文档中描述的流程，采用了“前端插值 + 后端优化”的层次化策略，以确保轨迹的质量和可行性。
 
-本项目实现了一个适用于固定翼无人机的B样条避障轨迹生成算法。该算法能够在给定栅格地图和动力学约束的情况下，将稀疏的离散路径点优化为满足固定翼飞行器动力学特性的平滑B样条轨迹。
+## 核心特性
 
-### 主要特性
+  * **平滑性**: 采用三次B样条曲线表示轨迹，保证了轨迹的二阶连续可导（$C^2$连续），并通过优化最小化加加速度（Jerk）来提升平滑度。
+  * **安全避障**: 利用B样条的凸包特性，通过对控制点施加约束，确保整段轨迹都与障碍物保持安全距离。该过程依赖于预先计算的**距离场（Distance Field）**。
+  * **动力学可行性**: 严格考虑固定翼无人机的物理限制，包括：
+      * 最小/最大飞行速度
+      * 最大向心加速度
+      * 最小转弯半径（最大曲率）
+  * **模块化设计**: 代码结构清晰，分为数据类型、B样条工具、轨迹优化器和主生成器等模块，方便集成到现有的无人机仿真平台或飞行控制系统中。
+  * **可定制化**: 算法的关键参数，如无人机动力学参数、优化权重等，均可轻松配置，以适应不同的任务需求和飞行环境。
 
-- **固定翼动力学约束**：考虑最小/最大飞行速度、最大加速度、最小转弯半径
-- **基于栅格地图的避障**：使用距离场进行高效的障碍物检测
--  **三次B样条轨迹**：生成C²连续的平滑轨迹
--  **凸包安全性保证**：确保B样条曲线段的凸包不与障碍物相交
--  **模块化设计**：易于集成到现有的无人机仿真或控制系统
--  **后端优化**：支持多种优化目标（平滑性、动力学约束、避障等）
+## 依赖项
 
-## 算法原理
+在编译和运行本项目之前，请确保您的系统已安装以下软件：
 
-算法主要包含以下5个步骤：
+1.  **CMake** (版本 3.10 或更高)
+2.  **C++17 编译器** (如 GCC, Clang)
+3.  **NLopt 库**: 一个开源的非线性优化库，是后端优化的核心依赖。
+      * **Ubuntu/Debian**: `sudo apt-get install libnlopt-dev`
+      * **macOS (Homebrew)**: `brew install nlopt`
+      * **源码安装**: 访问 [NLopt 官方文档](https://nlopt.readthedocs.io/en/latest/)
 
-1. **计算原始路径段的障碍距离**：评估每段路径到最近障碍物的距离
-2. **等距插值生成控制点**：根据障碍距离和速度约束进行自适应插值
-3. **构造B样条曲线**：使用均匀打结的三次B样条
-4. **后端优化**：优化控制点位置以满足所有约束
-5. **离散化输出**：生成可供飞控系统跟踪的时序轨迹点
+## 编译与运行
 
-详细算法说明请参考 [算法设计文档](https://hill68.github.io/uas/trajectory_planning/-b-spline/%E9%9A%9C%E7%A2%8D%E7%8E%AF%E5%A2%83%E4%B8%8B%E5%9B%BA%E5%AE%9A%E7%BF%BC%E6%97%A0%E4%BA%BA%E6%9C%BAb-%E6%A0%B7%E6%9D%A1%E9%81%BF%E9%9A%9C%E8%BD%A8%E8%BF%B9%E7%94%9F%E6%88%90%E7%AE%97%E6%B3%95/index.html)。
-
-## 系统要求
-
-- C++17 或更高版本
-- CMake 3.10+
-- Eigen3
-- Python 3.x + matplotlib（可选，用于可视化）
-
-### 可选依赖
-
-- IPOPT（推荐，用于高性能非线性优化）
-- OpenMP（用于并行加速）
-
-后端优化部分功能强大但实现复杂，通常依赖专业的非线性优化库。此代码实现选择了**NLopt**库，因为它开源、功能强大且易于集成。
-
-**在编译和运行前，您需要在您的系统中安装NLopt。**
-
-* **Ubuntu/Debian**: `sudo apt-get install libnlopt-dev`
-* **macOS (Homebrew)**: `brew install nlopt`
-* **源码安装**: 可以从 [NLopt官网](https://nlopt.readthedocs.io/en/latest/) 下载源码编译。
-
-## 快速开始
-
-### 1. 克隆仓库
+**1. 克隆仓库**
 
 ```bash
-git clone https://github.com/yourusername/fixed-wing-bspline-trajectory.git
-cd fixed-wing-bspline-trajectory
+git clone <your-repository-url>
+cd <your-repository-name>
 ```
 
-### 2. 编译
+**2. 编译项目**
+使用 CMake 进行编译：
 
 ```bash
-mkdir build && cd build
+mkdir build
+cd build
 cmake ..
-make -j4
+make
 ```
 
-### 3. 运行示例
+**3. 运行示例**
+编译成功后，在 `build` 目录下会生成一个名为 `trajectory_generator` 的可执行文件。
 
 ```bash
-./trajectory_example
+./trajectory_generator
 ```
 
-这将生成两个输出文件：
-- `trajectory_output.csv`：离散化的轨迹点
-- `control_points.csv`：B样条控制点
+程序将运行 `main.cpp` 中的示例代码，模拟一个简单的避障场景，并将生成的轨迹数据保存为 `final_trajectory.csv` 文件。您可以使用 Python (Matplotlib, Pandas)、MATLAB 等工具对该文件进行可视化分析。
 
-### 4. 可视化结果（可选）
+## 算法流程
 
-```bash
-cd ..
-python scripts/visualize_trajectory.py
-```
+算法遵循“前端粗规划、后端精细优化”的思想，主要分为以下几个步骤：
 
-## 使用方法
+### 1\. 前端：路径点插值与细化
 
-### 基本使用
+  * **输入**:
+      * 由A\*等路径搜索算法生成的稀疏初始路径点 `P`。
+      * 二维障碍物栅格地图及其对应的距离场 `DF`。
+      * 无人机动力学参数（速度、加速度、曲率限制）。
+  * **过程**:
+    1.  遍历初始路径的每一段 `(P_i, P_{i+1})`，根据该线段与最近障碍物的距离 `d_c` 和无人机最大速度 `v_max`，计算出允许的最大控制点间距 `r_max`。
+    2.  如果段长 `l_i > r_max`，则在线段上进行等距线性插值，生成新的控制点，以确保B样条的凸包足够贴近原始路径，从而保证基础的安全性。
+    3.  对插值后的控制点序列进行检查，合并距离过近的点（可能导致速度低于 `v_min`），为后端优化准备一个良好的初始值。
 
-```cpp
-#include "fixed_wing_bspline_trajectory.h"
+### 2\. 后端：非线性优化
 
-using namespace fixed_wing_planning;
+此阶段是算法的核心，目标是调整内部自由控制点的位置，以生成一条最优轨迹。
 
-// 1. 创建栅格地图
-GridMap map(500, 300, 0.5);  // 500x300格子，分辨率0.5m
-// 设置障碍物...
-map.computeDistanceField();
+  * **优化变量**: 除首尾各3个用于固定边界条件的控制点外，其余所有内部控制点 `Q_3, ..., Q_{M-3}`。
+  * **成本函数**: 最小化一个加权组合成本函数 `J(Q)`。
+  * **求解**: 使用 **NLopt** 库中的 L-BFGS (拟牛顿法) 算法求解此非线性优化问题，找到最优的控制点位置。
 
-// 2. 设置动力学参数
-FixedWingDynamics dynamics;
-dynamics.v_min = 15.0;      // 最小速度 15 m/s
-dynamics.v_max = 30.0;      // 最大速度 30 m/s
-dynamics.a_max = 5.0;       // 最大加速度 5 m/s²
-dynamics.r_min = 50.0;      // 最小转弯半径 50 m
+### 3\. 输出：离散化轨迹
 
-// 3. 设置B样条参数
-BSplineParams bspline_params;
-bspline_params.degree = 3;        // 三次B样条
-bspline_params.delta_t = 0.5;     // 时间间隔
+  * **过程**:
+    1.  使用优化后的控制点序列 `Q*` 构建最终的B样条曲线 `S*(t)`。
+    2.  按照固定的时间间隔 `Δt` 对连续的B样条曲线进行采样，计算每个采样点的位置、速度和加速度。
+    3.  对采样点进行最终的安全检查，确保所有动力学约束和避障要求都得到满足。
+  * **输出**: 一系列带时间戳的状态点 `{S_k}`，可直接发送给无人机的轨迹跟踪控制器。
 
-// 4. 设置优化参数
-OptimizationParams opt_params;
-opt_params.lambda_smooth = 1.0;
-opt_params.lambda_collision = 100.0;
-// ... 其他参数
-
-// 5. 创建轨迹生成器
-FixedWingBSplineTrajectory generator(map, dynamics, bspline_params, opt_params);
-
-// 6. 生成轨迹
-std::vector<PathPoint> waypoints = /* 从路径搜索算法获得 */;
-std::vector<TrajectoryPoint> trajectory;
-bool success = generator.generateTrajectory(waypoints, trajectory);
-```
-
-### 高级配置
-
-#### 使用IPOPT优化器
-
-如果安装了IPOPT，可以在CMake中启用：
-
-```bash
-cmake -DUSE_IPOPT=ON ..
-```
-
-#### 自定义优化权重
-
-```cpp
-OptimizationParams opt_params;
-opt_params.lambda_smooth = 1.0;      // 平滑性权重
-opt_params.lambda_velocity = 10.0;   // 速度约束权重
-opt_params.lambda_accel = 10.0;      // 加速度约束权重
-opt_params.lambda_curvature = 10.0;  // 曲率约束权重
-opt_params.lambda_collision = 100.0; // 碰撞避免权重
-```
-
-## 项目结构
-
-代码严格遵循了算法文档中描述的B样条轨迹生成流程，包括前端插值、后端优化和最终离散化。整体结构是模块化的，包含数据类型定义、B样条工具、轨迹优化器和主生成器类，可方便集成到无人机仿真系统中。
-
-项目代码分为以下几个文件：
-
-* `CMakeLists.txt`: 这是一个用于构建项目的示例 `CMakeLists.txt` 文件。用于编译项目，特别是链接NLopt库。
-* `DataTypes.h`: 此文件定义了整个算法流程中使用的核心数据结构。
-* `Bspline.h` / `Bspline.cpp`: B样条曲线的实现。
-* `TrajectoryOptimizer.h` / `TrajectoryOptimizer.cpp`: 后端优化器的实现，包含成本函数定义。
-* `TrajectoryGenerator.h` / `TrajectoryGenerator.cpp`: 算法主流程的封装。
-* `main.cpp`: 一个完整的使用示例，展示如何调用API。展示了如何初始化参数、创建虚拟环境（地图和距离场）并调用 `TrajectoryGenerator` 来生成轨迹。
+## 代码结构
 
 ```
-fixed-wing-bspline-trajectory/
-├── include/                          # 头文件
-│   ├── fixed_wing_bspline_trajectory.h
-│   └── trajectory_optimizer.h
-├── src/                             # 源文件
-│   ├── fixed_wing_bspline_trajectory.cpp
-│   └── trajectory_optimizer.cpp
-├── examples/                        # 示例代码
-│   └── example_usage.cpp
-├── scripts/                         # 辅助脚本
-│   └── visualize_trajectory.py
-├── tests/                          # 单元测试
-├── docs/                           # 文档
-│   └── algorithm_design.md
-├── CMakeLists.txt
-└── README.md
+.
+├── CMakeLists.txt              # CMake 编译配置
+├── README.md                   # 本文档
+├── DataTypes.h                 # 定义所有核心数据结构 (Vector2D, UAVParams, etc.)
+├── Bspline.h / .cpp            # B样条曲线类，封装求值和求导
+├── TrajectoryOptimizer.h / .cpp # 后端优化器，定义成本函数并与NLopt交互
+├── TrajectoryGenerator.h / .cpp # 算法主类，封装完整的生成流程
+└── main.cpp                    # 一个完整的使用示例和测试入口
 ```
 
-## API文档
+## 参数调整
 
-### 主要类
+您可以直接在 `main.cpp` 文件中修改以下参数，以观察它们对轨迹生成结果的影响：
 
-#### `FixedWingBSplineTrajectory`
+  * **`uav_params`**: 无人机的动力学参数。例如，增大 `v_min` 或减小 `R_min`（即增大 `kappa_max`）会让规划问题更具挑战性。
+  * **`bspline_params`**: B样条的基本参数，主要是时间间隔 `delta_t`。减小 `delta_t` 会产生更密集的轨迹点。
+  * **`weights`**: 优化器中各项成本的权重。这是最重要的调试参数：
+      * 增大 `weights.col` 会使轨迹更远离障碍物，但可能牺牲平滑度。
+      * 增大 `weights.smooth` 会使轨迹更平滑，但可能在避障时不够灵活。
+      * 增大 `weights.v`, `weights.a`, `weights.kappa` 会让优化器更严格地遵守相应的动力学约束。
 
-轨迹生成器的主类。
-
-```cpp
-class FixedWingBSplineTrajectory {
-public:
-    // 构造函数
-    FixedWingBSplineTrajectory(const GridMap& map,
-                               const FixedWingDynamics& dynamics,
-                               const BSplineParams& bspline_params,
-                               const OptimizationParams& opt_params);
-    
-    // 生成轨迹
-    bool generateTrajectory(const std::vector<PathPoint>& waypoints,
-                           std::vector<TrajectoryPoint>& trajectory);
-    
-    // 获取结果
-    const BSplineCurve& getBSplineCurve() const;
-    const std::vector<Point2D>& getControlPoints() const;
-};
-```
-
-#### `GridMap`
-
-栅格地图管理类，支持障碍物表示和距离场计算。
-
-```cpp
-class GridMap {
-public:
-    GridMap(int width, int height, double resolution);
-    
-    void setOccupied(int x, int y, bool occupied = true);
-    void computeDistanceField();
-    double getDistance(double x, double y) const;
-};
-```
-
-详细API文档请参考 [API Reference](docs/api_reference.md)。
-
-## 性能优化
-
-### 计算性能
-
-- 距离场计算：O(n²)，其中n是栅格数量
-- B样条评估：O(p)，其中p是样条次数
-- 优化迭代：取决于控制点数量和优化方法
-
-### 优化建议
-
-1. **预计算距离场**：在地图不变的情况下，只需计算一次
-2. **减少控制点数量**：通过合理的插值策略减少优化变量
-3. **使用稀疏优化器**：如IPOPT，利用问题的稀疏结构
-4. **并行化**：距离查询和梯度计算可以并行
-
-## 常见问题
-
-### Q: 如何处理动态障碍物？
-
-A: 当前实现假设静态环境。对于动态障碍物，可以：
-1. 定期更新距离场
-2. 在优化过程中增加时间维度
-3. 使用预测的障碍物轨迹
-
-### Q: 能否扩展到三维空间？
-
-A: 可以。需要：
-1. 将 `Point2D` 扩展为 `Point3D`
-2. 使用三维栅格地图
-3. 添加高度相关的动力学约束
-
-### Q: 如何调整轨迹的平滑度？
-
-A: 调整优化参数中的 `lambda_smooth` 权重。值越大，轨迹越平滑，但可能牺牲其他性能。
-
-## 相关项目
-
-- [PX4 Autopilot](https://github.com/PX4/PX4-Autopilot) - 开源飞控系统
-- [OMPL](https://ompl.kavrakilab.org/) - 开源运动规划库
-- [Fast-Planner](https://github.com/HKUST-Aerial-Robotics/Fast-Planner) - 四旋翼快速轨迹规划
-
-
+通过调整这些权重，可以在轨迹的平滑性、安全性与动力学性能之间找到最佳平衡。
 
