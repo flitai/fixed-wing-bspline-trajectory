@@ -1,0 +1,93 @@
+# CMakeLists.txt
+cmake_minimum_required(VERSION 3.10)
+project(FixedWingBSplineTrajectory)
+
+# 设置C++标准
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# 添加编译选项
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Wall -Wextra -O3)
+endif()
+
+# 查找必需的包
+find_package(Eigen3 REQUIRED)
+
+# 可选：查找IPOPT（如果使用IPOPT优化器）
+# find_package(IPOPT)
+
+# 创建库
+add_library(fixed_wing_bspline_lib
+    src/fixed_wing_bspline_trajectory.cpp
+    src/trajectory_optimizer.cpp
+)
+
+# 设置包含目录
+target_include_directories(fixed_wing_bspline_lib
+    PUBLIC 
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${EIGEN3_INCLUDE_DIR}
+)
+
+# 如果使用IPOPT
+# if(IPOPT_FOUND)
+#     target_link_libraries(fixed_wing_bspline_lib ${IPOPT_LIBRARIES})
+#     target_compile_definitions(fixed_wing_bspline_lib PRIVATE USE_IPOPT)
+# endif()
+
+# 创建示例可执行文件
+add_executable(trajectory_example
+    examples/example_usage.cpp
+)
+
+target_link_libraries(trajectory_example
+    fixed_wing_bspline_lib
+)
+
+# 创建测试可执行文件（可选）
+option(BUILD_TESTS "Build tests" ON)
+if(BUILD_TESTS)
+    enable_testing()
+    
+    add_executable(trajectory_tests
+        tests/test_main.cpp
+        tests/test_bspline.cpp
+        tests/test_gridmap.cpp
+    )
+    
+    target_link_libraries(trajectory_tests
+        fixed_wing_bspline_lib
+    )
+    
+    add_test(NAME trajectory_tests COMMAND trajectory_tests)
+endif()
+
+# 安装规则
+install(TARGETS fixed_wing_bspline_lib
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
+
+install(DIRECTORY include/
+    DESTINATION include
+)
+
+# 导出配置（方便其他项目使用）
+install(EXPORT FixedWingBSplineTargets
+    FILE FixedWingBSplineTargets.cmake
+    NAMESPACE FixedWingBSpline::
+    DESTINATION lib/cmake/FixedWingBSpline
+)
+
+# 打印配置信息
+message(STATUS "=== Fixed Wing B-Spline Trajectory Configuration ===")
+message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "Eigen3 Include: ${EIGEN3_INCLUDE_DIR}")
+# if(IPOPT_FOUND)
+#     message(STATUS "IPOPT: Found")
+# else()
+#     message(STATUS "IPOPT: Not found (using simple optimizer)")
+# endif()
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "Build Tests: ${BUILD_TESTS}")
